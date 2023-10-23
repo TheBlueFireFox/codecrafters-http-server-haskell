@@ -13,6 +13,7 @@ executable hs-http-server-clone-exe
   main-is: Main.hs
   other-modules:
       HttpRequest
+      HttpResponse
       Paths_hs_http_server_clone
   hs-source-dirs:
       app

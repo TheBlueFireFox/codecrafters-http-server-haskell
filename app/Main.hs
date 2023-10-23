@@ -6,10 +6,11 @@ import Control.Monad.IO.Class (MonadIO)
 import Data.ByteString qualified as BB
 import Data.ByteString.Char8 qualified as BBC
 import Data.ByteString.Lazy.Char8 qualified as BLC
-import Network.Simple.TCP
-
+import Data.String (IsString)
 import Debug.Trace (trace)
-import HttpRequest (HttpRequest (..), parseHttpHeader)
+import HttpRequest qualified as HReq
+import HttpResponse qualified as HRes
+import Network.Simple.TCP
 
 recvAll :: (MonadIO m) => Socket -> m BB.ByteString
 recvAll sock =
@@ -27,19 +28,53 @@ recvAll sock =
      in
         inner mempty
 
-httpError err = BBC.pack "HTTP/1.1 400 Bad Request\r\n\r\n" <> err
+httpError :: BLC.ByteString -> HRes.HttpResponse
+httpError err =
+    HRes.HttpResponse
+        { HRes.version = "HTTP/1.1"
+        , HRes.status = HRes.BadRequest
+        , HRes.contentType = HRes.TextPlain
+        , HRes.body = Just err
+        }
 
-http404 _ = BBC.pack "HTTP/1.1 404 Not Found\r\n\r\n"
+http404 :: p -> HRes.HttpResponse
+http404 _ =
+    HRes.HttpResponse
+        { HRes.version = "HTTP/1.1"
+        , HRes.status = HRes.NotFound
+        , HRes.contentType = HRes.TextPlain
+        , HRes.body = Nothing
+        }
 
-httpOk _ = "HTTP/1.1 200 OK\r\n\r\n"
+httpOk :: p -> HRes.HttpResponse
+httpOk _ =
+    HRes.HttpResponse
+        { HRes.version = "HTTP/1.1"
+        , HRes.status = HRes.Ok
+        , HRes.contentType = HRes.TextPlain
+        , HRes.body = Nothing
+        }
 
-handleHttpRequest req@HttpRequest{httpVerb, requestPath} =
-    if requestPath == BBC.pack "/"
-        then httpOk req
-        else http404 req
+httpEcho echo =
+    HRes.HttpResponse
+        { HRes.version = "HTTP/1.1"
+        , HRes.status = HRes.Ok
+        , HRes.contentType = HRes.TextPlain
+        , HRes.body = Just $ BLC.pack $ concat echo
+        }
 
+handleHttpPath req p =
+    case p of
+        ["/"] -> httpOk req
+        ("/" : "echo" : echo) -> httpEcho echo
+        _ -> http404 req
+
+handleHttpRequest :: HReq.HttpRequest -> HRes.HttpResponse
+handleHttpRequest req = handleHttpPath req $ map BBC.unpack $ HReq.path $ HReq.requestPath req
+
+handleRequestResult :: Either BBC.ByteString HReq.HttpRequest -> HRes.HttpResponse
 handleRequestResult (Right httpRequest) = handleHttpRequest httpRequest
-handleRequestResult (Left err) = httpError err
+handleRequestResult (Left err) = httpError $ BLC.fromStrict err
 
 main :: IO ()
 main = do
@@ -56,6 +91,9 @@ main = do
         BLC.putStrLn "Accepted connection"
         recvData <- recvAll serverSocket
         BBC.putStrLn recvData
-        let res = handleRequestResult $ parseHttpHeader recvData
-        BBC.putStrLn res
-        send serverSocket res
+        let req = HReq.parseHttpHeader recvData
+        BLC.putStrLn $ BLC.pack $ show req
+        let res = handleRequestResult req
+        let sendRes = HRes.httpResponse res
+        BLC.putStrLn sendRes
+        send serverSocket $ BB.toStrict sendRes
