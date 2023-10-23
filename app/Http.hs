@@ -35,6 +35,15 @@ http404 _ =
         , HRes.body = Nothing
         }
 
+httpNotAcceptable :: p -> HRes.HttpResponse
+httpNotAcceptable _ =
+    HRes.HttpResponse
+        { HRes.version = httpVersion
+        , HRes.status = HRes.NotAcceptable
+        , HRes.contentType = HRes.TextPlain
+        , HRes.body = Nothing
+        }
+
 httpOk :: p -> HRes.HttpResponse
 httpOk _ =
     HRes.HttpResponse
@@ -62,18 +71,14 @@ httpUserAgent HReq.HttpRequest{HReq.requestVersion, HReq.headers} =
         , HRes.body = lookup "User-Agent" headers
         }
 
-httpFiles :: p -> [Char] -> Config.Config -> IO HRes.HttpResponse
-httpFiles req file conf = case Config.directory conf of
-    Nothing -> pure $ http404 req
-    Just dir -> do
-        -- dir is an absolute path
-        let fpath = dir </> file
-        exits <- doesFileExist fpath
-        if not exits
-            then pure $ http404 req
-            else processFile fpath
+httpFilesGet :: p1 -> [Char] -> IO HRes.HttpResponse
+httpFilesGet req fpath = do
+    exits <- doesFileExist fpath
+    if not exits
+        then pure $ http404 req
+        else processFile
   where
-    processFile fpath = do
+    processFile = do
         fileContent <- BLC.readFile fpath
         pure
             $ HRes.HttpResponse
@@ -82,6 +87,37 @@ httpFiles req file conf = case Config.directory conf of
                 , HRes.contentType = HRes.OctetStream
                 , HRes.body = Just fileContent
                 }
+
+httpFilesPost :: HReq.HttpRequest -> [Char] -> IO HRes.HttpResponse
+httpFilesPost req fpath = do
+    exits <- doesFileExist fpath
+    if exits
+        then pure $ httpNotAcceptable req
+        else processFile
+  where
+    processFile = do
+        let body = HReq.body req
+        BLC.writeFile fpath body
+        pure
+            $ HRes.HttpResponse
+                { HRes.version = httpVersion
+                , HRes.status = HRes.Created
+                , HRes.contentType = HRes.OctetStream
+                , HRes.body = Nothing
+                }
+
+httpFiles :: HReq.HttpRequest -> [Char] -> Config.Config -> IO HRes.HttpResponse
+httpFiles req file conf = case Config.directory conf of
+    Nothing -> pure $ http404 req
+    Just dir -> do
+        -- dir is an absolute path
+        let fpath = dir </> file
+        processFile fpath
+  where
+    processFile fpath = case HReq.httpVerb req of
+        HReq.GET -> httpFilesGet req fpath
+        HReq.POST -> httpFilesPost req fpath
+        _ -> pure $ http404 req
 
 handleHttpPath :: Config.Config -> HReq.HttpRequest -> [String] -> IO HRes.HttpResponse
 handleHttpPath conf req p =

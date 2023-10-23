@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+
 module HttpRequest (parseHttpHeader, HttpRequest (..), HttpQuery (..), HttpVerb (..)) where
 
 import Data.ByteString qualified as BB
@@ -23,6 +24,7 @@ data HttpVerb
 
 type HttpHeaders = [(BL.ByteString, BL.ByteString)]
 type HttpVersion = BL.ByteString
+type HttpBody = BL.ByteString
 
 data HttpQuery = HttpQuery
     { path :: [BL.ByteString]
@@ -35,6 +37,7 @@ data HttpRequest = HttpRequest
     , requestPath :: HttpQuery
     , requestVersion :: HttpVersion
     , headers :: HttpHeaders
+    , body :: HttpBody
     }
     deriving (Show, Eq)
 
@@ -80,7 +83,9 @@ breakLines = filter (not . BB.null) . tokenise (BC.pack "\r\n")
 parseHttpHeader :: BC.ByteString -> Either BC.ByteString HttpRequest
 parseHttpHeader str =
     do
-        let requestLines = breakLines str
+        let (header, bodyRaw) = BC.breakSubstring "\r\n\r\n" str
+            body = BC.stripPrefix "\r\n\r\n" bodyRaw
+            requestLines = breakLines header
         (verb, reqPath, reqVer) <- parseRequestLine $ head requestLines
         headers <- parseHttpHeaderList $ tail requestLines
         let res =
@@ -89,5 +94,6 @@ parseHttpHeader str =
                     , requestPath = reqPath
                     , requestVersion = reqVer
                     , headers = headers
+                    , body = maybe mempty BL.fromStrict body
                     }
         pure res
