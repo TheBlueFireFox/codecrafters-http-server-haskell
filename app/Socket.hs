@@ -19,13 +19,13 @@ recvAll sock = inner mempty
         | BB.length d < block = pure (acc <> d)
         | otherwise = inner (acc <> d)
 
-serve :: MonadIO m => Tcp.HostName -> Tcp.ServiceName -> (BBC.ByteString -> BLC.ByteString) -> m a
+serve :: MonadIO m => Tcp.HostName -> Tcp.ServiceName -> (BBC.ByteString -> IO BLC.ByteString) -> m a
 serve host port handler = Tcp.serve (Tcp.Host host) port $ \(serverSocket, _serverAddr) -> do
     BLC.putStrLn "Accepted connection"
     req <- recvAll serverSocket
     BBC.putStrLn req
 
-    let res = handler req
+    res <- handler req
 
     BLC.putStrLn res
     Tcp.send serverSocket $ BB.toStrict res

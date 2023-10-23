@@ -2,14 +2,17 @@
 
 module Http (process) where
 
+import Config qualified
 import Data.ByteString.Char8 qualified as BBC
 import Data.ByteString.Lazy.Char8 qualified as BLC
 import Data.List (intercalate)
 import HttpRequest qualified as HReq
 import HttpResponse qualified as HRes
+import System.Directory (doesFileExist)
+import System.FilePath ((</>))
 
-process :: BBC.ByteString -> BLC.ByteString
-process = HRes.httpResponse . handleRequestResult . HReq.parseHttpHeader
+process :: Config.Config -> BBC.ByteString -> IO BLC.ByteString
+process config input = HRes.httpResponse <$> handleRequestResult config (HReq.parseHttpHeader input)
 
 httpVersion :: BLC.ByteString
 httpVersion = "HTTP/1.1"
@@ -59,17 +62,39 @@ httpUserAgent HReq.HttpRequest{HReq.requestVersion, HReq.headers} =
         , HRes.body = lookup "User-Agent" headers
         }
 
-handleHttpPath :: HReq.HttpRequest -> [[Char]] -> HRes.HttpResponse
-handleHttpPath req p =
+httpFiles :: p -> [Char] -> Config.Config -> IO HRes.HttpResponse
+httpFiles req file conf = case Config.directory conf of
+    Nothing -> pure $ http404 req
+    Just dir -> do
+        -- dir is an absolute path
+        let fpath = dir </> file
+        exits <- doesFileExist fpath
+        if not exits
+            then pure $ http404 req
+            else processFile fpath
+  where
+    processFile fpath = do
+        fileContent <- BLC.readFile fpath
+        pure
+            $ HRes.HttpResponse
+                { HRes.version = httpVersion
+                , HRes.status = HRes.Ok
+                , HRes.contentType = HRes.OctetStream
+                , HRes.body = Just fileContent
+                }
+
+handleHttpPath :: Config.Config -> HReq.HttpRequest -> [String] -> IO HRes.HttpResponse
+handleHttpPath conf req p =
     case p of
-        ["/"] -> httpOk req
-        ("/" : "echo" : echo) -> httpEcho req echo
-        ("/" : "user-agent" : _) -> httpUserAgent req
-        _ -> http404 req
+        ["/"] -> pure $ httpOk req
+        ("/" : "echo" : echo) -> pure $ httpEcho req echo
+        ("/" : "user-agent" : _) -> pure $ httpUserAgent req
+        ("/" : "files" : file : _) -> httpFiles req file conf
+        _ -> pure $ http404 req
 
-handleHttpRequest :: HReq.HttpRequest -> HRes.HttpResponse
-handleHttpRequest req = handleHttpPath req $ map BLC.unpack $ HReq.path $ HReq.requestPath req
+handleHttpRequest :: Config.Config -> HReq.HttpRequest -> IO HRes.HttpResponse
+handleHttpRequest conf req = handleHttpPath conf req $ map BLC.unpack $ HReq.path $ HReq.requestPath req
 
-handleRequestResult :: Either BBC.ByteString HReq.HttpRequest -> HRes.HttpResponse
-handleRequestResult (Right httpRequest) = handleHttpRequest httpRequest
-handleRequestResult (Left err) = httpError $ BLC.fromStrict err
+handleRequestResult :: Config.Config -> Either BBC.ByteString HReq.HttpRequest -> IO HRes.HttpResponse
+handleRequestResult config (Right httpRequest) = handleHttpRequest config httpRequest
+handleRequestResult _ (Left err) = pure $ httpError $ BLC.fromStrict err
