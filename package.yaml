@@ -8,6 +8,7 @@
 name: hs-http-server-clone
 version: 0.1.0.0
 license: BSD3
+language: GHC2021
 
 ghc-options:
   - -Wall

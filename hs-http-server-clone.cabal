@@ -12,6 +12,7 @@ build-type:     Simple
 executable hs-http-server-clone-exe
   main-is: Main.hs
   other-modules:
+      HttpRequest
       Paths_hs_http_server_clone
   hs-source-dirs:
       app
@@ -26,4 +27,4 @@ executable hs-http-server-clone-exe
     , network-simple
     , optparse-applicative
     , word8
-  default-language: Haskell2010
+  default-language: GHC2021
