@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module HttpResponse (Status (..), ContentType (..), HttpResponse (..), httpResponse) where
 
 import Data.ByteString.Lazy qualified as BL
