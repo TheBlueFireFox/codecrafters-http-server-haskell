@@ -60,3 +60,4 @@ httpResponse HttpResponse{version, status, contentType, body} =
         <> contentTypeToString contentType
         <> endOfLine
         <> handleBody body
+        <> endOfLine
