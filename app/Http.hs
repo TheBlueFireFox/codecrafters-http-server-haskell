@@ -1,11 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
+
 module Http (process) where
 
 import Data.ByteString.Char8 qualified as BBC
 import Data.ByteString.Lazy.Char8 qualified as BLC
+import Data.List (intercalate)
 import HttpRequest qualified as HReq
 import HttpResponse qualified as HRes
-import Data.List (intercalate)
 
 process :: BBC.ByteString -> BLC.ByteString
 process = HRes.httpResponse . handleRequestResult . HReq.parseHttpHeader
@@ -49,11 +50,21 @@ httpEcho req echo =
         , HRes.body = Just $ BLC.pack $ intercalate "/" echo
         }
 
+httpUserAgent :: HReq.HttpRequest -> HRes.HttpResponse
+httpUserAgent HReq.HttpRequest{HReq.requestVersion, HReq.headers} =
+    HRes.HttpResponse
+        { HRes.version = requestVersion
+        , HRes.status = HRes.Ok
+        , HRes.contentType = HRes.TextPlain
+        , HRes.body = lookup "User-Agent" headers
+        }
+
 handleHttpPath :: HReq.HttpRequest -> [[Char]] -> HRes.HttpResponse
 handleHttpPath req p =
     case p of
         ["/"] -> httpOk req
         ("/" : "echo" : echo) -> httpEcho req echo
+        ("/" : "user-agent" : _) -> httpUserAgent req
         _ -> http404 req
 
 handleHttpRequest :: HReq.HttpRequest -> HRes.HttpResponse
