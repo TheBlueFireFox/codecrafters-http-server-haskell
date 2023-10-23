@@ -2,7 +2,7 @@
 
 module Main (main) where
 
-import Data.ByteString.Lazy.Char8 qualified as BLC
+import qualified Data.ByteString.Lazy.Char8 as BLC
 import Network.Simple.TCP
 
 main :: IO ()
