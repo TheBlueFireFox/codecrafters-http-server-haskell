@@ -32,6 +32,8 @@ dependencies:
   - directory # required to deal with paths and dirs
   # Parsing libs
   - attoparsec
+  # compression
+  - zlib
 
 executables:
   hs-http-server-clone-exe:
