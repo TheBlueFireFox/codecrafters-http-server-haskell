@@ -48,8 +48,13 @@ data HttpRequest = HttpRequest
     deriving (Show, Eq)
 
 parseAcceptEncoding :: HttpHeaders -> Maybe HttpEncoding
-parseAcceptEncoding h = (listToMaybe . mapMaybe f . tokenise "," . BL.toStrict) =<< lookup "accept-encoding" h
+parseAcceptEncoding h = (listToMaybe . mapMaybe (f . BC.dropWhile dw) . tokenise "," . BL.toStrict) =<< lookup "accept-encoding" h
   where
+    dw ' ' = True
+    dw '\r' = True
+    dw '\n' = True
+    dw '\t' = True
+    dw _ = False
     f "gzip" = Just Gzip
     f _ = Nothing
 
