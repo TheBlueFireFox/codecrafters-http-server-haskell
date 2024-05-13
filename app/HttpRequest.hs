@@ -1,11 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module HttpRequest (parseHttpHeader, HttpRequest (..), HttpQuery (..), HttpVerb (..)) where
+module HttpRequest (parseHttpHeader, HttpRequest (..), HttpQuery (..), HttpVerb (..), HttpEncoding (..)) where
 
 import Data.ByteString qualified as BB
 import Data.ByteString.Char8 qualified as BC
 import Data.ByteString.Lazy qualified as BL
 import Data.ByteString.Lazy.Char8 qualified as BLC
+import Data.Char (toLower)
+import Data.Maybe (listToMaybe, mapMaybe)
 import Data.String (IsString)
 
 -- GET / HTTP/1.1\r\n
@@ -32,14 +34,24 @@ data HttpQuery = HttpQuery
     }
     deriving (Show, Eq)
 
+data HttpEncoding = Gzip
+    deriving (Show, Eq)
+
 data HttpRequest = HttpRequest
     { httpVerb :: HttpVerb
     , requestPath :: HttpQuery
     , requestVersion :: HttpVersion
     , headers :: HttpHeaders
+    , acceptEncoding :: Maybe HttpEncoding
     , body :: HttpBody
     }
     deriving (Show, Eq)
+
+parseAcceptEncoding :: HttpHeaders -> Maybe HttpEncoding
+parseAcceptEncoding h = (listToMaybe . mapMaybe f . tokenise "," . BL.toStrict) =<< lookup "accept-encoding" h
+  where
+    f "gzip" = Just Gzip
+    f _ = Nothing
 
 tokenise :: BC.ByteString -> BC.ByteString -> [BB.ByteString]
 tokenise x y = h : if BB.null t then [] else tokenise x (BB.drop (BB.length x) t)
@@ -75,7 +87,9 @@ parseRequestLine reqLine =
     parts = filter (not . BB.null) $ tokenise (BC.pack " ") reqLine
 
 parseHttpHeaderList :: [BC.ByteString] -> Either BC.ByteString HttpHeaders
-parseHttpHeaderList = Right . map ((\a -> (head a, a !! 1)) . map BL.fromStrict . tokenise (BC.pack ": "))
+parseHttpHeaderList = Right . map ((\a -> (f a, a !! 1)) . map BL.fromStrict . tokenise (BC.pack ": "))
+  where
+    f = BLC.pack . map toLower . BLC.unpack . head
 
 breakLines :: BC.ByteString -> [BC.ByteString]
 breakLines = filter (not . BB.null) . tokenise (BC.pack "\r\n")
@@ -88,12 +102,14 @@ parseHttpHeader str =
             requestLines = breakLines header
         (verb, reqPath, reqVer) <- parseRequestLine $ head requestLines
         headers <- parseHttpHeaderList $ tail requestLines
+        let encoding = parseAcceptEncoding headers
         let res =
                 HttpRequest
                     { httpVerb = verb
                     , requestPath = reqPath
                     , requestVersion = reqVer
                     , headers = headers
+                    , acceptEncoding = encoding
                     , body = maybe mempty BL.fromStrict body
                     }
         pure res

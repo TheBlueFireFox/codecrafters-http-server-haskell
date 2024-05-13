@@ -4,23 +4,26 @@ module HttpResponse (Status (..), ContentType (..), HttpResponse (..), httpRespo
 
 import Data.ByteString.Lazy qualified as BL
 import Data.ByteString.Lazy.Char8 qualified as BLC
+import HttpRequest (HttpEncoding (Gzip))
 
 data HttpResponse = HttpResponse
     { version :: BL.ByteString
     , status :: Status
     , contentType :: ContentType
+    , contentEncoding :: Maybe HttpEncoding
     , body :: Maybe BL.ByteString
     }
     deriving (Show)
 
 httpResponse :: HttpResponse -> BLC.ByteString
-httpResponse HttpResponse{version, status, contentType, body} =
+httpResponse HttpResponse{version, status, contentType, body, contentEncoding} =
     version
         <> space
         <> statusToString status
         <> endOfLine
         <> contentTypeToString contentType
         <> endOfLine
+        <> contentEncodingToString contentEncoding 
         <> handleBody body
         <> endOfLine
 
@@ -50,6 +53,11 @@ data ContentType
     | Html
     deriving (Show)
 
+contentEncodingToString :: Maybe HttpEncoding -> BLC.ByteString
+contentEncodingToString Nothing = ""
+contentEncodingToString (Just Gzip) = "Content-Encoding: gzip" <> endOfLine
+    
+
 contentTypeToString :: ContentType -> BLC.ByteString
 contentTypeToString contentType =
     "Content-Type: " <> case contentType of
@@ -68,4 +76,5 @@ contentLenght body = BLC.pack $ "Content-Length: " ++ show (BLC.length body)
 
 handleBody :: Maybe BLC.ByteString -> BLC.ByteString
 handleBody Nothing = endOfLine <> endOfLine
+-- TODO: compress if required
 handleBody (Just body) = contentLenght body <> endOfLine <> endOfLine <> body

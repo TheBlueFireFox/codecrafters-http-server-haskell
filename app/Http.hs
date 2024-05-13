@@ -7,6 +7,7 @@ import Data.ByteString.Char8 qualified as BBC
 import Data.ByteString.Lazy.Char8 qualified as BLC
 import Data.List (intercalate)
 import HttpRequest qualified as HReq
+import HttpResponse qualified as HREs
 import HttpResponse qualified as HRes
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
@@ -23,55 +24,61 @@ httpError err =
         { HRes.version = httpVersion
         , HRes.status = HRes.BadRequest
         , HRes.contentType = HRes.TextPlain
+        , HREs.contentEncoding = Nothing
         , HRes.body = Just err
         }
 
-http404 :: p -> HRes.HttpResponse
+http404 :: HReq.HttpRequest -> HRes.HttpResponse
 http404 _ =
     HRes.HttpResponse
         { HRes.version = httpVersion
         , HRes.status = HRes.NotFound
         , HRes.contentType = HRes.TextPlain
+        , HREs.contentEncoding = Nothing
         , HRes.body = Nothing
         }
 
-httpNotAcceptable :: p -> HRes.HttpResponse
+httpNotAcceptable :: HReq.HttpRequest -> HRes.HttpResponse
 httpNotAcceptable _ =
     HRes.HttpResponse
         { HRes.version = httpVersion
         , HRes.status = HRes.NotAcceptable
         , HRes.contentType = HRes.TextPlain
+        , HREs.contentEncoding = Nothing
         , HRes.body = Nothing
         }
 
-httpOk :: p -> HRes.HttpResponse
+httpOk :: HReq.HttpRequest -> HRes.HttpResponse
 httpOk _ =
     HRes.HttpResponse
         { HRes.version = httpVersion
         , HRes.status = HRes.Ok
         , HRes.contentType = HRes.TextPlain
+        , HREs.contentEncoding = Nothing
         , HRes.body = Nothing
         }
 
 httpEcho :: HReq.HttpRequest -> [String] -> HRes.HttpResponse
-httpEcho req echo =
+httpEcho HReq.HttpRequest{HReq.acceptEncoding, HReq.requestVersion} echo =
     HRes.HttpResponse
-        { HRes.version = HReq.requestVersion req
+        { HRes.version = requestVersion
         , HRes.status = HRes.Ok
+        , HREs.contentEncoding = acceptEncoding
         , HRes.contentType = HRes.TextPlain
         , HRes.body = Just $ BLC.pack $ intercalate "/" echo
         }
 
 httpUserAgent :: HReq.HttpRequest -> HRes.HttpResponse
-httpUserAgent HReq.HttpRequest{HReq.requestVersion, HReq.headers} =
+httpUserAgent HReq.HttpRequest{HReq.requestVersion, HReq.headers, HReq.acceptEncoding} =
     HRes.HttpResponse
         { HRes.version = requestVersion
         , HRes.status = HRes.Ok
         , HRes.contentType = HRes.TextPlain
-        , HRes.body = lookup "User-Agent" headers
+        , HREs.contentEncoding = acceptEncoding
+        , HRes.body = lookup "user-agent" headers
         }
 
-httpFilesGet :: p1 -> [Char] -> IO HRes.HttpResponse
+httpFilesGet :: HReq.HttpRequest -> [Char] -> IO HRes.HttpResponse
 httpFilesGet req fpath = do
     exits <- doesFileExist fpath
     if not exits
@@ -85,6 +92,7 @@ httpFilesGet req fpath = do
                 { HRes.version = httpVersion
                 , HRes.status = HRes.Ok
                 , HRes.contentType = HRes.OctetStream
+                , HRes.contentEncoding = HReq.acceptEncoding req
                 , HRes.body = Just fileContent
                 }
 
@@ -103,6 +111,7 @@ httpFilesPost req fpath = do
                 { HRes.version = httpVersion
                 , HRes.status = HRes.Created
                 , HRes.contentType = HRes.OctetStream
+                , HREs.contentEncoding = Nothing
                 , HRes.body = Nothing
                 }
 
